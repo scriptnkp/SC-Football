@@ -33,7 +33,8 @@ function renderDash() {
     const shortDesc = mItems[0].description.replace('TR. ', '').replace('TR.,', '').split(',').slice(0, 2).join(',');
     
     tbody += `<tr>`;
-    tbody += `<td><div style="font-weight:500;font-size:12px;color:var(--color-text-primary)">${shortDesc.trim()}</div><div class="mat-code">${m}</div></td>`;
+    // คอลัมน์แรก: ใส่ Event onclick เพื่อเปิด Modal รายละเอียดและส่งออก Excel
+    tbody += `<td class="sloc-row-clickable" onclick="showMatDetailModal('${m}', '${shortDesc.trim()}')" title="คลิกเพื่อดูรายละเอียดและส่งออก Excel"><div style="font-weight:500;font-size:12px;color:var(--color-text-primary)">${shortDesc.trim()}</div><div class="mat-code">${m}</div></td>`;
     
     let rowTot = 0;
     slocs.forEach(s => {
@@ -56,7 +57,6 @@ function renderDash() {
 }
 
 function showSlocModal(mat, title, sloc) {
-  // ✨ เรียงลำดับ TR จากน้อยไปมากด้วย localeCompare
   const items = RAW.filter(i => i.mat === mat && !i.is_issued && !i.is_written_off && (sloc === 'all' || i.sloc === sloc))
                    .sort((a, b) => (a.serial || '').localeCompare(b.serial || ''));
                    
@@ -106,8 +106,10 @@ function showSlocModal(mat, title, sloc) {
 }
 
 function closeModal(e) {
-  if (!e || e.target === document.getElementById('modal-ov'))
+  if (!e || e.target === document.getElementById('modal-ov')) {
     document.getElementById('modal-ov').classList.remove('on');
+    document.getElementById('modal-box').style.maxWidth = ''; // คืนค่าความกว้างกลับเป็น 450px ตามเดิม
+  }
 }
 
 // ----------------------------------------------------
@@ -183,4 +185,113 @@ async function handleMasterWarrantyUpload(e) {
         e.target.value = '';
         updateHdr();
     }
+}
+
+// ==========================================
+// Module: Material Detail Modal & Export (New Feature)
+// ==========================================
+
+window.currentMatForExport = [];
+window.currentMatTitleForExport = '';
+
+function showMatDetailModal(mat, title) {
+  // 1. กรองข้อมูลเฉพาะ Material ที่กด เลือกเฉพาะที่ยังไม่ถูกเบิกและยังไม่ถูกตัดจ่าย
+  const items = RAW.filter(i => i.mat === mat && !i.is_issued && !i.is_written_off)
+                   .sort((a, b) => (a.serial || '').localeCompare(b.serial || ''));
+  
+  // เก็บ State ไว้เผื่อกด Export
+  window.currentMatForExport = items;
+  window.currentMatTitleForExport = title;
+
+  document.getElementById('modal-ttl').textContent = `รายละเอียด: ${title} (${items.length} รายการ)`;
+  
+  // 2. สร้างโครงสร้างตารางและปุ่ม Export (ปรับให้คอลัมน์แยกกันเหมือน Excel)
+  let html = `
+    <div style="display: flex; justify-content: flex-end; margin-bottom: 16px;">
+        <button class="btn-gps" onclick="exportMatDetailToExcel()" style="background:var(--color-bg-success); color:var(--color-success); border:1px solid #bbf7d0;">
+            <i class="ti ti-file-spreadsheet"></i> ส่งออก .xlsx
+        </button>
+    </div>
+    <div style="overflow-x: auto; border: 1px solid var(--color-border); border-radius: var(--radius-md);">
+      <table class="sloc-table" style="min-width: 800px; border: none; box-shadow: none;">
+        <thead>
+          <tr>
+            <th style="text-align: left;">คำอธิบายวัสดุ</th>
+            <th style="text-align: center;">PEA</th>
+            <th style="text-align: center;">SN</th>
+            <th style="text-align: center;">Sloc</th>
+            <th style="text-align: left;">ยี่ห้อ</th>
+            <th style="text-align: center;">มีผลจาก</th>
+          </tr>
+        </thead>
+        <tbody>
+  `;
+
+  if (items.length > 0) {
+      items.forEach(i => {
+        html += `
+          <tr>
+            <td style="text-align: left;">
+                <div style="font-size:12px; color:var(--color-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px;" title="${i.description}">${i.description || '-'}</div>
+            </td>
+            <td style="text-align: center; font-weight:600; color:var(--color-text-primary)">${i.serial || '-'}</td>
+            <td style="text-align: center;">${i.asset_no || '-'}</td>
+            <td style="text-align: center;"><span class="badge bg-sloc">${i.sloc || '-'}</span></td>
+            <td style="text-align: left;">${i.mfr || '-'}</td>
+            <td style="text-align: center;"><span style="color:var(--color-primary); font-weight:500;">${i.import_date || '-'}</span></td>
+          </tr>
+        `;
+      });
+  } else {
+      html += `<tr><td colspan="6" style="text-align: center; color: var(--color-text-tertiary); padding: 30px;">ไม่มีข้อมูลคงเหลือ</td></tr>`;
+  }
+
+  html += `</tbody></table></div>`;
+  
+  // 3. ยิง HTML ใส่ Modal และแสดงผล
+  document.getElementById('modal-body').innerHTML = html;
+  document.getElementById('modal-box').style.maxWidth = '900px'; // ขยายความกว้าง Popup ให้พอดีกับตาราง
+  document.getElementById('modal-ov').classList.add('on');
+}
+
+function exportMatDetailToExcel() {
+  const items = window.currentMatForExport;
+  if (!items || items.length === 0) {
+      showToast('ไม่มีข้อมูลให้ส่งออก');
+      return;
+  }
+
+  // 1. Map ข้อมูล RAW จัดเรียงลำดับคอลัมน์ตามที่ต้องการ
+  const excelData = items.map((i, index) => ({
+      "ลำดับ": index + 1,
+      "คำอธิบายวัสดุ": i.description || '',
+      "PEA": i.serial || '',
+      "SN": i.asset_no || '',
+      "Sloc": i.sloc || '',
+      "ยี่ห้อ": i.mfr || '',
+      "มีผลจาก": i.import_date || ''
+  }));
+
+  // 2. ใช้คำสั่งของ SheetJS สร้าง Workbook
+  const worksheet = XLSX.utils.json_to_sheet(excelData);
+  
+  // ปรับความกว้างคอลัมน์ให้เหมาะสมกับข้อมูลที่จัดเรียงใหม่
+  worksheet['!cols'] = [
+    { wch: 8 },  // ลำดับ
+    { wch: 45 }, // คำอธิบายวัสดุ
+    { wch: 20 }, // PEA
+    { wch: 20 }, // SN
+    { wch: 10 }, // Sloc
+    { wch: 25 }, // ยี่ห้อ
+    { wch: 15 }  // มีผลจาก
+  ];
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Transformer_List");
+
+  // 3. ตั้งชื่อไฟล์และดาวน์โหลด
+  const safeTitle = (window.currentMatTitleForExport || 'Material').replace(/[\/\\?%*:|"<>]/g, '_');
+  const fileName = `Export_TFM_${safeTitle}.xlsx`;
+
+  XLSX.writeFile(workbook, fileName);
 }
