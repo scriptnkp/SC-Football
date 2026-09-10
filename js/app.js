@@ -220,13 +220,16 @@ function renderLog() {
   const monthInput = document.getElementById('log-month-input');
   const searchInput = document.getElementById('log-search-input');
   const sizeInput = document.getElementById('log-size-input');
-  if (!monthInput.value) monthInput.value = new Date().toISOString().slice(0, 7);
   
+  // ยกเลิกการยัดค่าเดือนปัจจุบันโดยอัตโนมัติ เพื่อให้แสดงข้อมูลรวมทุกเดือนได้หากค่าว่าง
   const currentMonth = monthInput.value;
   const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
   const selectedSize = sizeInput ? sizeInput.value : '';
 
   const logsInMonth = logs.filter(l => {
+    // ถ้าไม่มีการระบุเดือน (ว่างเปล่า) ให้ดึงข้อมูลทั้งหมดมาแสดงเลย (return true)
+    if (!currentMonth) return true;
+    
     const logDate = new Date(l.created_at);
     const logYYYYMM = logDate.getFullYear() + '-' + String(logDate.getMonth() + 1).padStart(2, '0');
     return logYYYYMM === currentMonth;
@@ -268,7 +271,8 @@ function renderLog() {
     sizeSummary[size] = (sizeSummary[size] || 0) + 1;
   });
 
-  let summaryHTML = '<div style="font-weight:600; margin-bottom:8px; color:var(--color-text-primary)">📊 สรุปยอดเบิกเดือนนี้:</div>';
+  // ปรับเปลี่ยนข้อความสรุป หากเลือกเดือนให้แสดง "เดือนที่เลือก" หากว่างให้แสดง "ทั้งหมด"
+  let summaryHTML = `<div style="font-weight:600; margin-bottom:8px; color:var(--color-text-primary)">📊 สรุปยอดเบิก${currentMonth ? 'เดือนที่เลือก' : 'ทั้งหมด'}:</div>`;
   if (Object.keys(sizeSummary).length) {
     for (const [sz, count] of Object.entries(sizeSummary)) {
       summaryHTML += `<div style="display:flex; justify-content:space-between; margin-bottom:4px; border-bottom:1px dashed var(--color-border); padding-bottom:4px;"><span style="color:var(--color-text-secondary)">${sz}</span><span style="font-weight:600; color:var(--color-primary)">${count} เครื่อง</span></div>`;
@@ -415,7 +419,6 @@ function getEditGPS() {
   }, { timeout: 10000 });
 }
 
-// 🛡️ บีบอัดภาพล็อกขนาดไม่เกิน 10MB สำหรับโหมดแก้ไข/เพิ่มเติมภายหลัง
 async function compressImageForEdit(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

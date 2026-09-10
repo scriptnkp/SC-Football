@@ -135,6 +135,8 @@
     <div class="sec">
       <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
         <input type="month" id="log-month-input" style="flex:1; min-width:120px;" onchange="currentLogPage=1; renderLog()" />
+        <!-- เพิ่มปุ่ม "ทั้งหมด" ที่นี่ -->
+        <button class="pill" onclick="document.getElementById('log-month-input').value=''; currentLogPage=1; renderLog();" style="display:flex; align-items:center; gap:4px;"><i class="ti ti-calendar-off" style="font-size:16px;"></i> ทั้งหมด</button>
         <select id="log-size-input" style="flex:1; min-width:120px; padding:10px 12px;" onchange="currentLogPage=1; renderLog()">
           <option value="">ทุกขนาด</option>
         </select>
